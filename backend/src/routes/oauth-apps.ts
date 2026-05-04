@@ -8,9 +8,14 @@
  *   GET    /v1/oauth/applications         — list apps owned by the current user
  *   POST   /v1/oauth/applications         — register a new app
  *   DELETE /v1/oauth/applications/:id     — revoke / delete an app
+ *
+ * Ownership is tracked via the `userId` field on the oauthApplication document.
+ * better-auth's registerOAuthApplication writes this from the metadata we embed,
+ * and better-auth also sets it from the authenticated session when available.
  */
 
 import { FastifyInstance } from "fastify";
+import { fromNodeHeaders } from "better-auth/node";
 import { requireAuth } from "../middleware/require-auth.js";
 import { auth } from "../lib/auth.js";
 import { getDB } from "../lib/db.js";
@@ -20,8 +25,8 @@ interface OAuthApplicationDoc {
   clientId: string;
   clientSecret?: string;
   name: string;
-  redirectUrls: string;  // comma-separated in better-auth's schema
-  metadata?: string;
+  redirectUrls: string; // comma-separated in better-auth's schema
+  metadata?: string | Record<string, unknown>;
   type: string;
   disabled?: boolean;
   userId?: string;
@@ -34,20 +39,29 @@ function oauthAppsCollection() {
 }
 
 function parseRedirectUrls(raw: string): string[] {
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function toResponse(doc: OAuthApplicationDoc) {
-  let type = doc.type;
+  let type = doc.type ?? "native";
   try {
-    const meta = doc.metadata ? JSON.parse(doc.metadata) : {};
-    if (meta.type) type = meta.type;
-  } catch { /* ignore */ }
+    const meta = doc.metadata
+      ? typeof doc.metadata === "string"
+        ? (JSON.parse(doc.metadata) as Record<string, unknown>)
+        : doc.metadata
+      : {};
+    if (meta.type) type = meta.type as string;
+  } catch {
+    /* ignore */
+  }
   return {
     id: doc.id,
     clientId: doc.clientId,
     name: doc.name,
-    redirectUrls: parseRedirectUrls(doc.redirectUrls),
+    redirectUrls: parseRedirectUrls(doc.redirectUrls ?? ""),
     type,
     disabled: doc.disabled ?? false,
     createdAt: doc.createdAt,
@@ -123,8 +137,7 @@ export async function oauthAppRoutes(app: FastifyInstance) {
               type: "string",
               enum: ["web", "native", "spa"],
               default: "native",
-              description:
-                "web = server-side, native = desktop/mobile, spa = single-page app",
+              description: "web = server-side, native = desktop/mobile, spa = single-page app",
             },
           },
         },
@@ -139,8 +152,7 @@ export async function oauthAppRoutes(app: FastifyInstance) {
                   clientId: { type: "string" },
                   clientSecret: {
                     type: "string",
-                    description:
-                      "Only returned once at creation. Store it securely.",
+                    description: "Only returned once at creation. Store it securely.",
                   },
                   name: { type: "string" },
                   redirectUrls: { type: "array", items: { type: "string" } },
@@ -155,7 +167,11 @@ export async function oauthAppRoutes(app: FastifyInstance) {
       },
     },
     async (req, reply) => {
-      const { name, redirectUris, type = "native" } = req.body as {
+      const {
+        name,
+        redirectUris,
+        type = "native",
+      } = req.body as {
         name: string;
         redirectUris: string[];
         type?: string;
@@ -169,8 +185,7 @@ export async function oauthAppRoutes(app: FastifyInstance) {
             parsed.protocol === "http:" &&
             (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost");
           const isHttps = parsed.protocol === "https:";
-          const isCustomScheme =
-            !["https:", "http:"].includes(parsed.protocol);
+          const isCustomScheme = !["https:", "http:"].includes(parsed.protocol);
           if (!isLoopback && !isHttps && !isCustomScheme) {
             return reply.status(400).send({
               error: `Redirect URI "${uri}" must use https://, http://127.0.0.1, or a custom scheme.`,
@@ -181,14 +196,25 @@ export async function oauthAppRoutes(app: FastifyInstance) {
         }
       }
 
+      // Register via better-auth's RFC 7591 API.
+      // metadata is used to store the app type; userId is written separately below.
       const result = await auth.api.registerOAuthApplication({
+        headers: fromNodeHeaders(req.headers),
         body: {
-          name,
-          redirectURLs: redirectUris,
-          userId: req.user!.id,
-          metadata: JSON.stringify({ type }),
+          client_name: name,
+          redirect_uris: redirectUris,
+          metadata: { type, userId: req.user!.id },
         },
       });
+
+      // better-auth's registerOAuthApplication may not set userId on the document.
+      // Back-fill it so ownership queries work correctly.
+      if (result?.client_id) {
+        await oauthAppsCollection().updateOne(
+          { clientId: result.client_id },
+          { $set: { userId: req.user!.id } }
+        );
+      }
 
       return reply.status(201).send({ application: result });
     }
@@ -220,7 +246,10 @@ export async function oauthAppRoutes(app: FastifyInstance) {
       const { id } = req.params as { id: string };
 
       // Verify ownership before deletion
-      const existing = await oauthAppsCollection().findOne({ id, userId: req.user!.id });
+      const existing = await oauthAppsCollection().findOne({
+        id,
+        userId: req.user!.id,
+      });
       if (!existing) {
         return reply.status(404).send({ error: "Application not found" });
       }
@@ -231,4 +260,3 @@ export async function oauthAppRoutes(app: FastifyInstance) {
     }
   );
 }
-

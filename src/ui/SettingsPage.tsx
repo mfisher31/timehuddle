@@ -394,7 +394,9 @@ const DeveloperApplications: React.FC = () => {
   const [newType, setNewType] = useState<'web' | 'native' | 'spa'>('native');
   const [formError, setFormError] = useState<string | null>(null);
   // clientSecret is shown once after creation and then gone
-  const [revealedSecret, setRevealedSecret] = useState<{ clientId: string; secret: string } | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<{ clientId: string; secret: string } | null>(
+    null,
+  );
 
   const loadApps = useCallback(async () => {
     setLoading(true);
@@ -407,12 +409,17 @@ const DeveloperApplications: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { void loadApps(); }, [loadApps]);
+  useEffect(() => {
+    void loadApps();
+  }, [loadApps]);
 
   const handleCreate = async () => {
     setFormError(null);
     const name = newName.trim();
-    const redirectUris = newUris.split('\n').map((s) => s.trim()).filter(Boolean);
+    const redirectUris = newUris
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (!name) return setFormError('Name is required.');
     if (redirectUris.length === 0) return setFormError('At least one redirect URI is required.');
 
@@ -477,9 +484,13 @@ const DeveloperApplications: React.FC = () => {
 
       {/* App list */}
       {loading ? (
-        <Text variant="muted" size="sm">Loading…</Text>
+        <Text variant="muted" size="sm">
+          Loading…
+        </Text>
       ) : apps.length === 0 ? (
-        <Text variant="muted" size="sm">No applications yet.</Text>
+        <Text variant="muted" size="sm">
+          No applications yet.
+        </Text>
       ) : (
         <ul className="developer-app-list flex flex-col gap-2" role="list">
           {apps.map((app) => (
@@ -490,7 +501,9 @@ const DeveloperApplications: React.FC = () => {
               <div className="developer-app-info min-w-0">
                 <p className="truncate text-sm font-medium">{app.name}</p>
                 <p className="truncate font-mono text-xs text-neutral-500">{app.clientId}</p>
-                <p className="text-xs text-neutral-400">{app.type} · {app.redirectUrls.join(', ')}</p>
+                <p className="text-xs text-neutral-400">
+                  {app.type} · {app.redirectUrls.join(', ')}
+                </p>
               </div>
               <Button
                 size="sm"
@@ -533,7 +546,9 @@ const DeveloperApplications: React.FC = () => {
             ]}
           />
           {formError && (
-            <Text variant="destructive" size="sm" role="alert">{formError}</Text>
+            <Text variant="destructive" size="sm" role="alert">
+              {formError}
+            </Text>
           )}
           <div className="developer-app-form-actions flex gap-2">
             <Button
@@ -548,7 +563,10 @@ const DeveloperApplications: React.FC = () => {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => { setShowForm(false); setFormError(null); }}
+              onClick={() => {
+                setShowForm(false);
+                setFormError(null);
+              }}
               aria-label="Cancel"
             >
               Cancel

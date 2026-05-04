@@ -53,7 +53,9 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
         {
           name: "Attachments",
           description: "Generic media attachments for clock entries and tickets",
-        },        { name: "OAuth", description: "OAuth 2.0 application management" },      ],
+        },
+        { name: "OAuth", description: "OAuth 2.0 application management" },
+      ],
     },
   });
 
