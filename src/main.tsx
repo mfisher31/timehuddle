@@ -42,6 +42,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { InboxPage } from './features/inbox/InboxPage';
+import { OAuthConsentPage } from './features/oauth/ConsentPage';
 import { SessionProvider, useSession } from './lib/useSession';
 import { AppLayout } from './ui/AppLayout';
 import { LandingPage } from './ui/LandingPage';
@@ -82,6 +83,7 @@ const RESERVED_PATHS = new Set([
   'help',
   'support',
   'about',
+  'oauth',
   'contact',
   'privacy',
   'terms',
@@ -129,6 +131,13 @@ const App: React.FC = () => {
 
   if (resetToken) {
     return <LoginForm initialMode="reset-confirm" />;
+  }
+
+  // OAuth 2.0 consent page — shown when a third-party client (e.g. Qt desktop)
+  // requests authorization. Requires the user to be logged in first.
+  if (window.location.pathname === '/oauth/consent') {
+    if (!user) return <LoginForm />;
+    return <OAuthConsentPage />;
   }
 
   if (loading) {

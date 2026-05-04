@@ -4,15 +4,19 @@
  *   • Profile       — display name, bio, website, linked sign-in accounts, password reset
  *   • Appearance    — theme toggle
  *   • Account       — sign out
+ *   • Developer     — OAuth 2.0 application management
  *   • About         — stack versions
  */
 import {
   faBell,
+  faCode,
   faGear,
   faInfo,
   faPalette,
+  faPlus,
   faRotateLeft,
   faRightFromBracket,
+  faTrash,
   faUser,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -37,7 +41,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from '../lib/nativePush';
-import { authApi, userApi } from '../lib/api';
+import { authApi, userApi, oauthApi, type OAuthApplication } from '../lib/api';
 import { GitHubConnectionRow } from './GitHubConnectionRow';
 import { PROFILE_BIO_MAX, PROFILE_DISPLAY_NAME_MAX, PROFILE_WEBSITE_MAX } from '../lib/constants';
 import { useBrand, BRANDS } from '../lib/useBrand';
@@ -376,6 +380,196 @@ const ProfileEditor: React.FC = () => {
   );
 };
 
+// ─── Developer Applications ───────────────────────────────────────────────────
+
+const REDIRECT_URI_PLACEHOLDER = 'https://myapp.com/callback or myapp://callback';
+
+const DeveloperApplications: React.FC = () => {
+  const [apps, setApps] = useState<OAuthApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newUris, setNewUris] = useState('');
+  const [newType, setNewType] = useState<'web' | 'native' | 'spa'>('native');
+  const [formError, setFormError] = useState<string | null>(null);
+  // clientSecret is shown once after creation and then gone
+  const [revealedSecret, setRevealedSecret] = useState<{ clientId: string; secret: string } | null>(null);
+
+  const loadApps = useCallback(async () => {
+    setLoading(true);
+    try {
+      setApps(await oauthApi.list());
+    } catch {
+      // non-fatal
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadApps(); }, [loadApps]);
+
+  const handleCreate = async () => {
+    setFormError(null);
+    const name = newName.trim();
+    const redirectUris = newUris.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!name) return setFormError('Name is required.');
+    if (redirectUris.length === 0) return setFormError('At least one redirect URI is required.');
+
+    setCreating(true);
+    try {
+      const app = await oauthApi.create({ name, redirectUris, type: newType });
+      if (app.clientSecret) {
+        setRevealedSecret({ clientId: app.clientId, secret: app.clientSecret });
+      }
+      setNewName('');
+      setNewUris('');
+      setShowForm(false);
+      await loadApps();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to create application.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await oauthApi.remove(id);
+      await loadApps();
+    } catch {
+      // non-fatal
+    }
+  };
+
+  return (
+    <div className="developer-apps flex flex-col gap-4 px-5 py-4">
+      {/* One-time secret reveal */}
+      {revealedSecret && (
+        <div
+          role="alert"
+          className="developer-secret-banner rounded border border-yellow-300 bg-yellow-50 p-3 text-sm dark:border-yellow-700 dark:bg-yellow-950"
+        >
+          <p className="font-medium text-yellow-800 dark:text-yellow-300">
+            Save your client secret — it won&apos;t be shown again.
+          </p>
+          <dl className="developer-secret-fields mt-2 flex flex-col gap-1 font-mono text-xs">
+            <div>
+              <dt className="inline font-sans font-medium">Client ID: </dt>
+              <dd className="inline select-all">{revealedSecret.clientId}</dd>
+            </div>
+            <div>
+              <dt className="inline font-sans font-medium">Client Secret: </dt>
+              <dd className="inline select-all">{revealedSecret.secret}</dd>
+            </div>
+          </dl>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => setRevealedSecret(null)}
+            aria-label="Dismiss client secret notice"
+          >
+            I&apos;ve saved it
+          </Button>
+        </div>
+      )}
+
+      {/* App list */}
+      {loading ? (
+        <Text variant="muted" size="sm">Loading…</Text>
+      ) : apps.length === 0 ? (
+        <Text variant="muted" size="sm">No applications yet.</Text>
+      ) : (
+        <ul className="developer-app-list flex flex-col gap-2" role="list">
+          {apps.map((app) => (
+            <li
+              key={app.id}
+              className="developer-app-item flex items-center justify-between gap-3 rounded border border-neutral-200 px-3 py-2 dark:border-neutral-700"
+            >
+              <div className="developer-app-info min-w-0">
+                <p className="truncate text-sm font-medium">{app.name}</p>
+                <p className="truncate font-mono text-xs text-neutral-500">{app.clientId}</p>
+                <p className="text-xs text-neutral-400">{app.type} · {app.redirectUrls.join(', ')}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="danger"
+                leftIcon={<FontAwesomeIcon icon={faTrash} className="text-xs" />}
+                onClick={() => void handleDelete(app.id)}
+                aria-label={`Delete application ${app.name}`}
+              >
+                Delete
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Add application form */}
+      {showForm ? (
+        <div className="developer-app-form flex flex-col gap-3 rounded border border-neutral-200 p-3 dark:border-neutral-700">
+          <Input
+            placeholder="Application name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            aria-label="Application name"
+          />
+          <Textarea
+            placeholder={REDIRECT_URI_PLACEHOLDER}
+            value={newUris}
+            onChange={(e) => setNewUris(e.target.value)}
+            aria-label="Redirect URIs (one per line)"
+            rows={3}
+          />
+          <Select
+            value={newType}
+            onValueChange={(v) => setNewType(v as 'web' | 'native' | 'spa')}
+            aria-label="Application type"
+            options={[
+              { label: 'Native / Desktop', value: 'native' },
+              { label: 'Single-Page App (SPA)', value: 'spa' },
+              { label: 'Web (server-side)', value: 'web' },
+            ]}
+          />
+          {formError && (
+            <Text variant="destructive" size="sm" role="alert">{formError}</Text>
+          )}
+          <div className="developer-app-form-actions flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => void handleCreate()}
+              isLoading={creating}
+              loadingText="Creating…"
+              aria-label="Create application"
+            >
+              Create
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setShowForm(false); setFormError(null); }}
+              aria-label="Cancel"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          leftIcon={<FontAwesomeIcon icon={faPlus} className="text-xs" />}
+          onClick={() => setShowForm(true)}
+          aria-label="Add OAuth application"
+        >
+          Add application
+        </Button>
+      )}
+    </div>
+  );
+};
+
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
 
 export const SettingsPage: React.FC = () => {
@@ -457,6 +651,15 @@ export const SettingsPage: React.FC = () => {
             Sign out
           </Button>
         </Row>
+      </Section>
+
+      {/* Developer */}
+      <Section
+        icon={faCode}
+        title="Developer"
+        description="OAuth 2.0 applications that can \u201cLogin with TimeHuddle\u201d on behalf of your users."
+      >
+        <DeveloperApplications />
       </Section>
 
       {/* About */}

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
-import { bearer } from "better-auth/plugins";
+import { bearer, oidcProvider } from "better-auth/plugins";
 import { client } from "./db.js";
 import { sendEmail } from "./email.js";
 import { teamService } from "../services/team.service.js";
@@ -13,6 +13,38 @@ export const auth = betterAuth({
     // `Authorization: Bearer <token>` on all authenticated requests.
     // Required for Capacitor (custom-scheme WebViews where cookies are unreliable).
     bearer(),
+
+    // OIDC provider — enables "Login with TimeHuddle" for third-party clients
+    // such as the Qt desktop application. Exposes the standard OAuth 2.0 endpoints:
+    //   GET  /api/auth/oauth2/authorize   — authorization endpoint
+    //   POST /api/auth/oauth2/token       — token exchange
+    //   GET  /api/auth/oauth2/userinfo    — user info (Bearer token)
+    //   GET  /api/auth/.well-known/openid-configuration
+    oidcProvider({
+      loginPage: "/login",
+      consentPage: "/oauth/consent",
+
+      // The Qt desktop app is registered as a trusted public client.
+      // Public clients use PKCE and have no client secret.
+      // client_id is stable; rotate QT_OAUTH_CLIENT_ID env var to invalidate.
+      trustedClients: [
+        {
+          clientId: process.env.QT_OAUTH_CLIENT_ID ?? "qt-timehuddle-desktop",
+          clientSecret: process.env.QT_OAUTH_CLIENT_SECRET ?? "",
+          name: "TimeHuddle Desktop",
+          type: "native",
+          redirectUrls: [
+            // Custom URI scheme (Windows/macOS/Linux with URI handler registered)
+            "timehuddle-qt://callback",
+            // Loopback redirect — fallback for systems that can't register URI schemes
+            "http://127.0.0.1",
+          ],
+          disabled: false,
+          skipConsent: false,
+          metadata: {},
+        },
+      ],
+    }),
   ],
 
   emailAndPassword: {

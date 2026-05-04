@@ -15,6 +15,7 @@ import { clockRoutes } from "./routes/clock.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { attachmentRoutes } from "./routes/attachments.js";
+import { oauthAppRoutes } from "./routes/oauth-apps.js";
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? true });
@@ -52,8 +53,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
         {
           name: "Attachments",
           description: "Generic media attachments for clock entries and tickets",
-        },
-      ],
+        },        { name: "OAuth", description: "OAuth 2.0 application management" },      ],
     },
   });
 
@@ -401,6 +401,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(messageRoutes, { prefix: "/v1" });
   await app.register(notificationRoutes, { prefix: "/v1" });
   await app.register(attachmentRoutes, { prefix: "/v1" });
+  await app.register(oauthAppRoutes, { prefix: "/v1" });
 
   return app;
 }

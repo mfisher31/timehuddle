@@ -682,3 +682,37 @@ export const attachmentApi = {
       method: 'DELETE',
     }),
 };
+
+// ─── OAuth Application API ────────────────────────────────────────────────────
+
+export interface OAuthApplication {
+  id: string;
+  clientId: string;
+  clientSecret?: string; // only present on creation
+  name: string;
+  redirectUrls: string[];
+  type: 'web' | 'native' | 'spa';
+  disabled?: boolean;
+  createdAt: string;
+}
+
+export const oauthApi = {
+  /** List OAuth apps owned by the current user. */
+  list: () =>
+    request<{ applications: OAuthApplication[] }>('/v1/oauth/applications').then(
+      (r) => r.applications,
+    ),
+
+  /** Register a new OAuth application. Returns clientSecret once — store it securely. */
+  create: (data: { name: string; redirectUris: string[]; type?: 'web' | 'native' | 'spa' }) =>
+    request<{ application: OAuthApplication }>('/v1/oauth/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }).then((r) => r.application),
+
+  /** Delete (revoke) an OAuth application by its database ID. */
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/v1/oauth/applications/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+};
