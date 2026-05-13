@@ -49,3 +49,19 @@ API available at `http://localhost:4000`.
 npm run build    # Compiles to dist/
 node dist/server.js
 ```
+
+## Migrations
+
+Use migrate-mongo to manage database migrations stored in `backend/migrations/`:
+
+```bash
+npm run migrate          # Run pending migrations
+npm run migrate:status   # Check applied vs pending
+npm run migrate:down     # Undo last migration
+```
+
+Create a new migration with auto-generated timestamp:
+
+```bash
+npx migrate-mongo create -f migrate-mongo-config.cjs "add-users-index"
+```
