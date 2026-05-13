@@ -40,3 +40,4 @@ vite.config.js
 my-submodule/*
 .gitmodules
 .meteor/local
+current.md
