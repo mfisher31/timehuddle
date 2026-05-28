@@ -21,7 +21,6 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
-  Select,
   Spinner,
   Table,
   TableBody,
@@ -91,7 +90,7 @@ function getSessionBreakSeconds(session: ClockEvent, now: number): number {
 
 export const TimesheetPage: React.FC = () => {
   const { user } = useSession();
-  const { teamsReady, teams, selectedTeamId, currentTime } = useTeam();
+  const { teamsReady, teams, currentTime } = useTeam();
 
   const [preset, setPreset] = useState<Preset>('week');
   const [customStart, setCustomStart] = useState('');
@@ -112,7 +111,6 @@ export const TimesheetPage: React.FC = () => {
   const [addEntryOpen, setAddEntryOpen] = useState(false);
   const [newClockIn, setNewClockIn] = useState('');
   const [newClockOut, setNewClockOut] = useState('');
-  const [newTeamId, setNewTeamId] = useState('');
   const [addEntryLoading, setAddEntryLoading] = useState(false);
   const [addEntryError, setAddEntryError] = useState<string | null>(null);
 
@@ -293,10 +291,9 @@ export const TimesheetPage: React.FC = () => {
   const openAddEntry = useCallback(() => {
     setNewClockIn('');
     setNewClockOut('');
-    setNewTeamId(selectedTeamId ?? teams[0]?.id ?? '');
     setAddEntryError(null);
     setAddEntryOpen(true);
-  }, [selectedTeamId, teams]);
+  }, []);
 
   const handleAddEntry = useCallback(async () => {
     const parsedStart = fromLocalDateTimeInputValue(newClockIn);
@@ -318,22 +315,16 @@ export const TimesheetPage: React.FC = () => {
       setAddEntryError('Clock-out must be after clock-in.');
       return;
     }
-    if (!newTeamId) {
-      setAddEntryError('Please select a team.');
-      return;
-    }
     setAddEntryLoading(true);
     setAddEntryError(null);
     try {
       await clockApi.createManualEntry({
-        teamId: newTeamId,
         startTime: parsedStart,
         endTime: parsedEnd,
       });
       setAddEntryOpen(false);
       setNewClockIn('');
       setNewClockOut('');
-      setNewTeamId('');
       await fetchData();
     } catch (e) {
       if (e instanceof ApiError) {
@@ -344,7 +335,7 @@ export const TimesheetPage: React.FC = () => {
     } finally {
       setAddEntryLoading(false);
     }
-  }, [newClockIn, newClockOut, newTeamId, fetchData]);
+  }, [newClockIn, newClockOut, fetchData]);
 
   // Duration previews (display-only, computed from inputs)
   const editDurationSeconds = useMemo(() => {
@@ -376,24 +367,18 @@ export const TimesheetPage: React.FC = () => {
   // Team name lookup for edit modal
   const editTeamName = useMemo(() => {
     if (!activeSession) return '';
-    return teams.find((t) => t.id === activeSession.teamId)?.name ?? '';
+    return activeSession.teamId
+      ? (teams.find((t) => t.id === activeSession.teamId)?.name ?? activeSession.teamId)
+      : 'No Team';
   }, [activeSession, teams]);
-
-  // Team options for new entry (exclude personal workspace)
-  const teamOptions = useMemo(
-    () => teams.filter((t) => !t.isPersonal).map((t) => ({ value: t.id, label: t.name })),
-    [teams],
-  );
 
   const presets = PRESETS;
 
-  // Filter sessions by selected team
+  // Team-agnostic sessions
   const filteredSessions = useMemo(() => {
     if (!data) return [];
-    return selectedTeamId
-      ? data.sessions.filter((s) => s.teamId === selectedTeamId)
-      : data.sessions;
-  }, [data, selectedTeamId]);
+    return data.sessions;
+  }, [data]);
 
   // Recompute summary from filtered sessions
   const filteredSummary = useMemo(() => {
@@ -450,7 +435,6 @@ export const TimesheetPage: React.FC = () => {
           size="sm"
           leftIcon={<FontAwesomeIcon icon={faPlus} />}
           onClick={openAddEntry}
-          disabled={teamOptions.length === 0}
         >
           Add Entry
         </Button>
@@ -772,12 +756,6 @@ export const TimesheetPage: React.FC = () => {
           </Text>
         </ModalHeader>
         <ModalBody className="space-y-4">
-          <Select
-            label="Team"
-            value={newTeamId}
-            onValueChange={(val) => setNewTeamId(val)}
-            options={teamOptions}
-          />
           <Input
             label="Clock In"
             type="datetime-local"

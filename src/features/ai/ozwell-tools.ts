@@ -97,9 +97,7 @@ export const OZWELL_TOOLS: OzwellTool[] = [
     function: {
       name: 'clock_in',
       description:
-        'Clock the user in to the currently selected team. ' +
-        'Does NOT switch teams — call switch_team first if the user wants a different team. ' +
-        'Only call this when the user explicitly asks to clock in.',
+        'Clock the user in. ' + 'Only call this when the user explicitly asks to clock in.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -107,7 +105,7 @@ export const OZWELL_TOOLS: OzwellTool[] = [
     type: 'function',
     function: {
       name: 'clock_out',
-      description: 'Clock the user out for the currently selected team.',
+      description: 'Clock the user out.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },

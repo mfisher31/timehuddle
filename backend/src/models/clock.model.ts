@@ -28,7 +28,6 @@ export interface ClockBreak extends ClockBreakInterval {
 export interface ClockEvent {
   _id: ObjectId;
   userId: string;
-  teamId: string;
   startTime: number; // epoch ms — shift start (mutable via updateTimes)
   accumulatedTime: number; // seconds — computed at clock-out (span minus deducted breaks)
   notifiedAt4h?: number | null; // epoch ms when 4h reminder was sent
@@ -37,26 +36,12 @@ export interface ClockEvent {
 
 // ─── ClockEvent helpers ────────────────────────────────────────────────────────
 
-export async function findActiveClockEventByUserTeam(
-  userId: string,
-  teamId: string
-): Promise<ClockEvent | null> {
-  return clockEventsCollection().findOne({ userId, teamId, endTime: null });
-}
-
 export async function findActiveClockEventByUser(userId: string): Promise<ClockEvent | null> {
   return clockEventsCollection().findOne({ userId, endTime: null });
 }
 
 export async function findClockEventsForUser(userId: string): Promise<ClockEvent[]> {
   return clockEventsCollection().find({ userId }).sort({ startTime: -1 }).toArray();
-}
-
-export async function findLiveClockEventsForTeams(teamIds: string[]): Promise<ClockEvent[]> {
-  if (!teamIds.length) return [];
-  return clockEventsCollection()
-    .find({ teamId: { $in: teamIds }, endTime: null })
-    .toArray();
 }
 
 // ─── ClockBreak helpers ────────────────────────────────────────────────────────

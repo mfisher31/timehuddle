@@ -6,11 +6,12 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../middleware/require-auth.js";
 import { teamsCollection } from "../models/index.js";
 import { mediaService } from "../services/media.service.js";
+import { getVideoStorageDir } from "../lib/video-storage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const thumbnailsDir = path.resolve(__dirname, "../../uploads/thumbnails");
 const mediaDir = path.resolve(__dirname, "../../uploads/media");
-const videosDir = path.resolve(__dirname, "../../data/videos");
+const videosDir = getVideoStorageDir();
 
 function buildImageFilename(userId: string, ext: string): string {
   const hex = randomBytes(8).toString("hex");

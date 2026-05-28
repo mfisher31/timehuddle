@@ -463,11 +463,7 @@ const CLOCK_SCHEDULE: [string, number, number, number, number, number][] =
     ])
   );
 
-async function seedClockEvents(
-  userIdsByEmail: Map<string, string>,
-  teamIdsByName: Map<string, string>
-) {
-  const devTeamId = teamIdsByName.get("Developers") ?? "";
+async function seedClockEvents(userIdsByEmail: Map<string, string>) {
   for (const [email, daysAgo, inH, inM, outH, outM] of CLOCK_SCHEDULE) {
     const userId = userIdsByEmail.get(email);
     if (!userId) continue;
@@ -483,7 +479,6 @@ async function seedClockEvents(
     await clockEventsCollection().insertOne({
       _id: new ObjectId(),
       userId,
-      teamId: devTeamId,
       startTime,
       accumulatedTime,
       endTime,
@@ -1104,7 +1099,7 @@ async function seed() {
   const teamIdsByName = new Map(allTeams.map((t) => [t.name, t._id.toHexString()]));
 
   const ticketIdsByTitle = await seedTickets(userIdsByEmail, teamIdsByName);
-  await seedClockEvents(userIdsByEmail, teamIdsByName);
+  await seedClockEvents(userIdsByEmail);
   await seedTimers(userIdsByEmail, ticketIdsByTitle);
 
   await client.close();

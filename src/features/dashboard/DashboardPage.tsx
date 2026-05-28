@@ -58,7 +58,7 @@ function computeHours(events: ClockEvent[], after: number, now: number): number 
 export const DashboardPage: React.FC = () => {
   const { user } = useSession();
   const { navigate } = useRouter();
-  const { teams, teamsReady, activeClockEvent, currentTime, selectedTeamId } = useTeam();
+  const { teams, teamsReady, activeClockEvent, currentTime } = useTeam();
 
   // All user clock events (from timecore REST)
   const [allEvents, setAllEvents] = useState<ClockEvent[]>([]);
@@ -81,11 +81,7 @@ export const DashboardPage: React.FC = () => {
     }, [user]),
   );
 
-  // Filter events to the selected team
-  const teamEvents = useMemo(
-    () => (selectedTeamId ? allEvents.filter((e) => e.teamId === selectedTeamId) : allEvents),
-    [allEvents, selectedTeamId],
-  );
+  const teamEvents = useMemo(() => allEvents, [allEvents]);
 
   // Compute stats
   const todayStart = useMemo(() => startOfDay(new Date()).getTime(), []);
@@ -263,7 +259,7 @@ export const DashboardPage: React.FC = () => {
                 const start = new Date(event.startTime);
                 const end = event.endTime ? new Date(event.endTime) : null;
                 const durSec = end ? (end.getTime() - event.startTime) / 1000 : 0;
-                const team = teams.find((t) => t.id === event.teamId);
+                const team = event.teamId ? teams.find((t) => t.id === event.teamId) : null;
                 return (
                   <li key={event.id} className="flex items-center justify-between px-5 py-3">
                     <div className="min-w-0">
@@ -272,7 +268,9 @@ export const DashboardPage: React.FC = () => {
                         {end ? ` – ${formatTime(end)}` : ''}
                       </Text>
                       <Text variant="muted" size="xs" className="mt-0.5">
-                        {team?.isPersonal ? 'Personal' : (team?.name ?? 'Unknown')}
+                        {team?.isPersonal
+                          ? 'Personal'
+                          : (team?.name ?? (event.teamId ? 'Unknown Team' : 'No Team'))}
                       </Text>
                     </div>
                     <Badge variant="secondary" size="sm">

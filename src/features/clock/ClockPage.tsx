@@ -15,7 +15,7 @@ import { useRouter } from '../../ui/router';
 // ─── ClockPage ────────────────────────────────────────────────────────────────
 
 export const ClockPage: React.FC = () => {
-  const { selectedTeamId, activeClockEvent, currentTime, teamsReady } = useTeam();
+  const { activeClockEvent, currentTime, teamsReady } = useTeam();
   const { navigate } = useRouter();
 
   const {
@@ -86,7 +86,6 @@ export const ClockPage: React.FC = () => {
                 <Button
                   onClick={clockIn}
                   isLoading={clockInLoading}
-                  disabled={!selectedTeamId}
                   className="flex w-full items-center justify-center gap-3 rounded-2xl bg-green-500 py-4 text-white shadow-lg transition-transform hover:scale-[1.02] hover:bg-green-600 active:scale-95 disabled:opacity-50 sm:h-16 sm:w-16 sm:rounded-full sm:py-0"
                   aria-label="Clock in"
                 >

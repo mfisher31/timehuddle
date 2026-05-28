@@ -26,7 +26,7 @@ const mockRefetchClock = vi.fn();
 
 function setupTeam(
   opts: {
-    activeClockEvent?: { id: string; teamId: string } | null;
+    activeClockEvent?: { id: string; teamId?: string } | null;
     selectedTeamId?: string | null;
   } = {},
 ) {
@@ -51,8 +51,8 @@ describe('useClockToggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.alert = vi.fn();
-    mockStart.mockResolvedValue({ id: 'evt1', teamId: 'team1' } as any);
-    mockStop.mockResolvedValue({ id: 'evt1', teamId: 'team1' } as any);
+    mockStart.mockResolvedValue({ id: 'evt1' } as any);
+    mockStop.mockResolvedValue({ id: 'evt1' } as any);
     mockRefetchClock.mockResolvedValue(undefined);
   });
 
@@ -81,18 +81,18 @@ describe('useClockToggle', () => {
 
       await act(() => result.current.clockIn());
 
-      expect(mockStart).toHaveBeenCalledWith('team-abc');
+      expect(mockStart).toHaveBeenCalledWith();
       expect(mockRefetchClock).toHaveBeenCalledOnce();
     });
 
-    it('does nothing if selectedTeamId is null', async () => {
+    it('does not require selectedTeamId', async () => {
       setupTeam({ activeClockEvent: null, selectedTeamId: null });
       const { result } = renderHook(() => useClockToggle());
 
       await act(() => result.current.clockIn());
 
-      expect(mockStart).not.toHaveBeenCalled();
-      expect(mockRefetchClock).not.toHaveBeenCalled();
+      expect(mockStart).toHaveBeenCalledWith();
+      expect(mockRefetchClock).toHaveBeenCalledOnce();
     });
 
     it('sets clockInLoading=true during the call and false after', async () => {
@@ -121,7 +121,7 @@ describe('useClockToggle', () => {
   // ── clockOut() ──────────────────────────────────────────────────────────────
 
   describe('clockOut()', () => {
-    it("uses the active event's teamId (not selectedTeamId) to stop", async () => {
+    it('stops when there is an active event', async () => {
       setupTeam({
         activeClockEvent: { id: 'evt1', teamId: 'team-from-event' },
         selectedTeamId: 'team-from-ui',
@@ -130,20 +130,20 @@ describe('useClockToggle', () => {
 
       await act(() => result.current.clockOut());
 
-      expect(mockStop).toHaveBeenCalledWith('team-from-event');
+      expect(mockStop).toHaveBeenCalledWith();
       expect(mockRefetchClock).toHaveBeenCalledOnce();
     });
 
-    it('falls back to selectedTeamId when there is no active event', async () => {
+    it('does nothing when there is no active event', async () => {
       setupTeam({ activeClockEvent: null, selectedTeamId: 'team-fallback' });
       const { result } = renderHook(() => useClockToggle());
 
       await act(() => result.current.clockOut());
 
-      expect(mockStop).toHaveBeenCalledWith('team-fallback');
+      expect(mockStop).not.toHaveBeenCalled();
     });
 
-    it('does nothing when both teamId sources are null', async () => {
+    it('does nothing when there is no active event and no selected team', async () => {
       setupTeam({ activeClockEvent: null, selectedTeamId: null });
       const { result } = renderHook(() => useClockToggle());
 

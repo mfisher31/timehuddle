@@ -698,7 +698,7 @@ describe("clock-out closes all open timer sessions", () => {
     const db = client.db();
 
     // Clock in to the team
-    await inject("POST", "/v1/clock/start", cookieA, { teamId });
+    await inject("POST", "/v1/clock/start", cookieA);
 
     // Start a timer session for the ticket
     const today = new Date().toISOString().slice(0, 10);
@@ -711,7 +711,7 @@ describe("clock-out closes all open timer sessions", () => {
     expect(runningBefore).not.toBeNull();
 
     // Clock out — this should close all timers
-    await inject("POST", "/v1/clock/stop", cookieA, { teamId });
+    await inject("POST", "/v1/clock/stop", cookieA);
 
     // Verify no timers are running for this user
     const runningAfter = await db.collection("timers").findOne({ userId: userAId, endTime: null });
@@ -723,13 +723,13 @@ describe("clock-out closes all open timer sessions", () => {
 
 describe("ClockEvent no longer has tickets[]", () => {
   it("POST /v1/clock/start returns event without tickets field", async () => {
-    const res = await inject("POST", "/v1/clock/start", cookieA, { teamId });
+    const res = await inject("POST", "/v1/clock/start", cookieA);
     expect(res.statusCode).toBe(200);
     const { event } = res.json();
     expect(event.tickets).toBeUndefined();
 
     // Clock back out
-    await inject("POST", "/v1/clock/stop", cookieA, { teamId });
+    await inject("POST", "/v1/clock/stop", cookieA);
   });
 });
 

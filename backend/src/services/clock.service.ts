@@ -5,22 +5,15 @@ import {
   clockBreaksCollection,
   clockEventsCollection,
   teamsCollection,
-  usersCollection,
 } from "../models/index.js";
 import type { ClockBreak, ClockBreakInterval, ClockEvent } from "../models/clock.model.js";
 import {
   findActiveClockEventByUser,
-  findActiveClockEventByUserTeam,
   findBreaksForEvent,
   findBreaksForEvents,
   findClockEventsForUser,
-  findLiveClockEventsForTeams,
 } from "../models/clock.model.js";
 import { timerService } from "./timer.service.js";
-import { ActivityType } from "../models/activity.model.js";
-
-import { notificationService } from "./notification.service.js";
-import { emitActivity } from "./activity.service.js";
 
 /** 20-minute threshold: breaks ≥ this are non-compensable meal breaks (deducted). */
 const MEAL_BREAK_THRESHOLD_SECONDS = 20 * 60;
@@ -154,7 +147,7 @@ function normalizeBreakEntries(
 
 // ─── SSE broadcast ────────────────────────────────────────────────────────────
 
-type SseListener = (teamId: string, event: PublicClockEvent | null) => void;
+type SseListener = (userId: string, event: PublicClockEvent | null) => void;
 const sseListeners = new Set<SseListener>();
 
 export function subscribe(fn: SseListener): () => void {
@@ -162,8 +155,8 @@ export function subscribe(fn: SseListener): () => void {
   return () => sseListeners.delete(fn);
 }
 
-function broadcast(teamId: string, event: PublicClockEvent | null) {
-  for (const fn of sseListeners) fn(teamId, event);
+function broadcast(userId: string, event: PublicClockEvent | null) {
+  for (const fn of sseListeners) fn(userId, event);
 }
 
 // ─── Public shape ─────────────────────────────────────────────────────────────
@@ -206,7 +199,6 @@ export function toPublicClockEvent(e: ClockEvent, breaks: ClockBreakInterval[]) 
   return {
     id: e._id.toHexString(),
     userId: e.userId,
-    teamId: e.teamId,
     startTime,
     accumulatedTime: e.accumulatedTime,
     breaks: publicBreaks,
@@ -223,11 +215,6 @@ export type PublicClockEvent = ReturnType<typeof toPublicClockEvent>;
 // ─── ClockService ─────────────────────────────────────────────────────────────
 
 export class ClockService {
-  /** Return the active (open) clock event for a user in a team, or null. */
-  async getActive(userId: string, teamId: string): Promise<ClockEvent | null> {
-    return findActiveClockEventByUserTeam(userId, teamId);
-  }
-
   /** Return the active clock event across any team for the user. */
   async getActiveForUser(userId: string): Promise<ClockEvent | null> {
     return findActiveClockEventByUser(userId);
@@ -238,29 +225,16 @@ export class ClockService {
     return findClockEventsForUser(userId);
   }
 
-  /** Live clock events for a set of teams (used by SSE + dashboard). */
-  async getLiveForTeams(teamIds: string[]): Promise<ClockEvent[]> {
-    return findLiveClockEventsForTeams(teamIds);
-  }
-
-  async start(userId: string, teamId: string): Promise<PublicClockEvent | "forbidden"> {
-    if (!isValidId(teamId)) return "forbidden";
-    const team = await teamsCollection().findOne({
-      _id: new ObjectId(teamId),
-      $or: [{ members: userId }, { admins: userId }],
-    });
-    if (!team) return "forbidden";
-
+  async start(userId: string): Promise<PublicClockEvent> {
     const coll = clockEventsCollection();
 
-    // Close any open events for this user+team
+    // Close any open events for this user
     const now = Date.now();
-    await coll.updateMany({ userId, teamId, endTime: null }, { $set: { endTime: now } });
+    await coll.updateMany({ userId, endTime: null }, { $set: { endTime: now } });
 
     const result = await coll.insertOne({
       _id: new ObjectId(),
       userId,
-      teamId,
       startTime: now,
       accumulatedTime: 0,
       notifiedAt4h: null,
@@ -268,50 +242,16 @@ export class ClockService {
     });
 
     const created = await coll.findOne({ _id: result.insertedId });
-    if (!created) return "forbidden";
+    if (!created) throw new Error("Failed to create clock event");
     const pub = toPublicClockEvent(created, []);
-    broadcast(teamId, pub);
-
-    // Notify team admins
-    const user = isValidId(userId)
-      ? await usersCollection().findOne({ _id: new ObjectId(userId) })
-      : null;
-    const userName = user?.name ?? user?.email?.split("@")[0] ?? "Someone";
-    const notifyAdmins = (team.admins ?? []).filter((id) => id !== userId);
-    await Promise.all(
-      notifyAdmins.map((adminId) =>
-        notificationService
-          .create({
-            userId: adminId,
-            title: "TiméHuddle",
-            body: `${userName} clocked in to ${team.name}`,
-            notificationData: {
-              type: "clock-in",
-              userId,
-              userName,
-              teamName: team.name,
-              teamId,
-              url: `/app/clock`,
-            },
-          })
-          .catch(() => {})
-      )
-    );
-
-    void emitActivity({
-      userId,
-      teamId,
-      type: ActivityType.ClockIn,
-      actor: { id: userId, name: userName },
-      payload: { teamId, teamName: team.name },
-    });
+    broadcast(userId, pub);
 
     return pub;
   }
 
-  async stop(userId: string, teamId: string): Promise<PublicClockEvent | "not-found"> {
+  async stop(userId: string): Promise<PublicClockEvent | "not-found"> {
     const coll = clockEventsCollection();
-    const event = await coll.findOne({ userId, teamId, endTime: null });
+    const event = await coll.findOne({ userId, endTime: null });
     if (!event) return "not-found";
 
     const now = Date.now();
@@ -347,63 +287,14 @@ export class ClockService {
     const updated = await coll.findOne({ _id: event._id });
     if (!updated) return "not-found";
     const pub = toPublicClockEvent(updated, closedBreaks);
-    broadcast(teamId, null); // null = user is no longer clocked in
-
-    // Notify team admins
-    const team = await teamsCollection().findOne({ _id: new ObjectId(teamId) });
-    if (team) {
-      const user = isValidId(userId)
-        ? await usersCollection().findOne({ _id: new ObjectId(userId) })
-        : null;
-      const userName = user?.name ?? user?.email?.split("@")[0] ?? "Someone";
-      const totalSecs = pub.accumulatedTime ?? 0;
-      const h = Math.floor(totalSecs / 3600);
-      const m = Math.floor((totalSecs % 3600) / 60);
-      const durationText = h > 0 ? `${h}h ${m}m` : `${m}m`;
-      const notifyAdmins = (team.admins ?? []).filter((id) => id !== userId);
-      await Promise.all(
-        notifyAdmins.map((adminId) =>
-          notificationService
-            .create({
-              userId: adminId,
-              title: "TiméHuddle",
-              body: `${userName} clocked out of ${team.name} (${durationText})`,
-              notificationData: {
-                type: "clock-out",
-                userId,
-                userName,
-                teamName: team.name,
-                teamId,
-                duration: durationText,
-                url: `/app/clock`,
-              },
-            })
-            .catch(() => {})
-        )
-      );
-
-      void emitActivity({
-        userId,
-        teamId,
-        type: ActivityType.ClockOut,
-        actor: { id: userId, name: userName },
-        payload: {
-          teamId,
-          teamName: team.name,
-          durationSeconds: pub.accumulatedTime ?? undefined,
-        },
-      });
-    }
+    broadcast(userId, null); // null = user is no longer clocked in
 
     return pub;
   }
 
-  async pause(
-    userId: string,
-    teamId: string
-  ): Promise<PublicClockEvent | "not-found" | "already-paused"> {
+  async pause(userId: string): Promise<PublicClockEvent | "not-found" | "already-paused"> {
     const coll = clockEventsCollection();
-    const event = await coll.findOne({ userId, teamId, endTime: null });
+    const event = await coll.findOne({ userId, endTime: null });
     if (!event) return "not-found";
 
     const breaks = await findBreaksForEvent(event._id.toHexString());
@@ -424,16 +315,13 @@ export class ClockService {
     // Use optimistic in-memory view — avoid extra round-trip
     const updatedBreaks: ClockBreakInterval[] = [...breaks, { startTime: now, endTime: null }];
     const pub = toPublicClockEvent(event, updatedBreaks);
-    broadcast(teamId, pub);
+    broadcast(userId, pub);
     return pub;
   }
 
-  async resume(
-    userId: string,
-    teamId: string
-  ): Promise<PublicClockEvent | "not-found" | "not-paused"> {
+  async resume(userId: string): Promise<PublicClockEvent | "not-found" | "not-paused"> {
     const coll = clockEventsCollection();
-    const event = await coll.findOne({ userId, teamId, endTime: null });
+    const event = await coll.findOne({ userId, endTime: null });
     if (!event) return "not-found";
 
     const breaks = await findBreaksForEvent(event._id.toHexString());
@@ -453,14 +341,11 @@ export class ClockService {
       b._id.equals(openBreak._id) ? { ...b, endTime: now, ...classification } : b
     );
     const pub = toPublicClockEvent(event, updatedBreaks);
-    broadcast(teamId, pub);
+    broadcast(userId, pub);
     return pub;
   }
 
-  async getStatus(
-    userId: string,
-    teamId: string
-  ): Promise<
+  async getStatus(userId: string): Promise<
     | {
         event: PublicClockEvent;
         workSeconds: number;
@@ -468,7 +353,7 @@ export class ClockService {
       }
     | "not-found"
   > {
-    const event = await this.getActive(userId, teamId);
+    const event = await this.getActiveForUser(userId);
     if (!event) return "not-found";
 
     const now = Date.now();
@@ -501,13 +386,12 @@ export class ClockService {
     const event = await coll.findOne({ _id: new ObjectId(clockEventId) });
     if (!event) return "not-found";
 
-    // Allow self-service edits for the event owner. Admins can also edit.
     if (event.userId !== requesterId) {
-      const adminTeam = await teamsCollection().findOne({
-        _id: new ObjectId(event.teamId),
+      const sharedAdminTeam = await teamsCollection().findOne({
         admins: requesterId,
+        $or: [{ members: event.userId }, { admins: event.userId }],
       });
-      if (!adminTeam) return "forbidden";
+      if (!sharedAdminTeam) return "forbidden";
     }
 
     const effectiveStart = typeof data.startTime === "number" ? data.startTime : event.startTime;
@@ -577,11 +461,11 @@ export class ClockService {
     if (!event) return "not-found";
 
     if (event.userId !== requesterId) {
-      const adminTeam = await teamsCollection().findOne({
-        _id: new ObjectId(event.teamId),
+      const sharedAdminTeam = await teamsCollection().findOne({
         admins: requesterId,
+        $or: [{ members: event.userId }, { admins: event.userId }],
       });
-      if (!adminTeam) return "forbidden";
+      if (!sharedAdminTeam) return "forbidden";
     }
 
     await coll.deleteOne({ _id: event._id });
@@ -592,30 +476,20 @@ export class ClockService {
       "attachedTo.id": clockEventId,
     });
 
-    if (event.endTime === null) {
-      broadcast(event.teamId, null);
-    }
+    if (event.endTime === null) broadcast(event.userId, null);
 
     return "ok";
   }
 
   /**
    * Create a completed clock event for a past time range (manual backfill).
-   * Requester must be a member of the team. Both times must be in the past.
+   * Both times must be in the past.
    */
   async createManual(
     userId: string,
-    teamId: string,
     startTime: number,
     endTime: number
-  ): Promise<PublicClockEvent | "forbidden" | "invalid-range"> {
-    if (!isValidId(teamId)) return "forbidden";
-    const team = await teamsCollection().findOne({
-      _id: new ObjectId(teamId),
-      $or: [{ members: userId }, { admins: userId }],
-    });
-    if (!team) return "forbidden";
-
+  ): Promise<PublicClockEvent | "invalid-range"> {
     const now = Date.now();
     if (startTime > now || endTime > now) return "invalid-range";
     if (endTime <= startTime) return "invalid-range";
@@ -625,14 +499,13 @@ export class ClockService {
     const result = await coll.insertOne({
       _id: new ObjectId(),
       userId,
-      teamId,
       startTime,
       accumulatedTime,
       endTime,
     });
 
     const created = await coll.findOne({ _id: result.insertedId });
-    if (!created) return "forbidden";
+    if (!created) throw new Error("Failed to create manual clock event");
     return toPublicClockEvent(created, []);
   }
 

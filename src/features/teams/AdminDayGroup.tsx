@@ -65,11 +65,13 @@ export const AdminDayGroup: React.FC<Props> = ({
   const latestEnd = hasActiveSession ? null : Math.max(...sessions.map((s) => s.endTime as number));
 
   // Team: single name if all sessions share a team, otherwise "Multiple"
-  const teamIds = [...new Set(sessions.map((s) => s.teamId))];
+  const teamIds = [...new Set(sessions.map((s) => s.teamId).filter(Boolean))] as string[];
   const teamLabel =
-    teamIds.length === 1
-      ? (teams.find((t) => t.id === teamIds[0])?.name ?? teamIds[0])
-      : 'Multiple';
+    teamIds.length === 0
+      ? 'No Team'
+      : teamIds.length === 1
+        ? (teams.find((t) => t.id === teamIds[0])?.name ?? teamIds[0])
+        : 'Multiple';
 
   // Sessions sorted descending for the expanded view (newest first)
   const sortedSessions = sessions

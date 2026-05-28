@@ -76,6 +76,8 @@ run_backend() {
   echo ""
   echo "==> Backend — lint, format, typecheck, build, test"
   check_mongo
+  local test_videos_dir="$PWD/backend/.tmp/videos"
+  mkdir -p "$test_videos_dir"
   (
     cd backend
     if [[ "$FIX" == "true" ]]; then
@@ -89,6 +91,7 @@ run_backend() {
     npm run build
     MONGODB_URI="${MONGODB_URI:-mongodb://localhost:27017/timehuddle_test}" \
     BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-local-test-secret}" \
+    TIMEHUDDLE_VIDEOS_DIR="$test_videos_dir" \
     PORT="${PORT:-4000}" \
     CI=1 npm test
   )

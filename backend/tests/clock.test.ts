@@ -27,7 +27,6 @@ let adminCookie: string;
 let otherCookie: string;
 let workerId: string;
 let adminId: string;
-let teamId: string;
 let clockEventId: string;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -96,7 +95,6 @@ beforeAll(async () => {
     createdAt: new Date(),
   };
   await db.collection("teams").insertOne(teamDoc);
-  teamId = teamDoc._id.toHexString();
 
   workerCookie = await getSessionCookie(WORKER.email, WORKER.password);
   adminCookie = await getSessionCookie(ADMIN.email, ADMIN.password);
@@ -106,7 +104,11 @@ beforeAll(async () => {
 afterAll(async () => {
   const db = client.db();
   await db.collection("teams").deleteOne({ code: "CLOCKTEAM1" });
-  await db.collection("clockevents").deleteMany({ teamId });
+  await db.collection("clockevents").deleteMany({ userId: workerId });
+  await db.collection("clockevents").deleteMany({ userId: adminId });
+  await db.collection("clockevents").deleteMany({
+    userId: String((await db.collection("user").findOne({ email: OTHER.email }))?._id ?? ""),
+  });
   await db.collection("notifications").deleteMany({ userId: workerId });
   await db.collection("timers").deleteMany({ userId: workerId });
   await db.collection("workitems").deleteMany({ userId: workerId });
@@ -121,7 +123,6 @@ describe("auth gate", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/clock/start",
-      payload: { teamId: "abc" },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -130,7 +131,6 @@ describe("auth gate", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/clock/stop",
-      payload: { teamId: "abc" },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -140,27 +140,27 @@ describe("auth gate", () => {
 
 describe("POST /v1/clock/start", () => {
   it("clocks in — 200, returns event", async () => {
-    const res = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const res = await inject("POST", "/v1/clock/start", workerCookie);
     expect(res.statusCode).toBe(200);
     const { event } = res.json();
     expect(event.userId).toBe(workerId);
-    expect(event.teamId).toBe(teamId);
     expect(event.endTime).toBeNull();
     expect(typeof event.startTime).toBe("number");
     clockEventId = event.id;
   });
 
   it("clocking in again closes the previous event and opens a new one", async () => {
-    const res = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const res = await inject("POST", "/v1/clock/start", workerCookie);
     expect(res.statusCode).toBe(200);
     const { event } = res.json();
     expect(event.id).not.toBe(clockEventId);
     clockEventId = event.id; // use the latest one
   });
 
-  it("returns 403 when user is not a team member", async () => {
-    const res = await inject("POST", "/v1/clock/start", otherCookie, { teamId });
-    expect(res.statusCode).toBe(403);
+  it("allows any authenticated user to clock in", async () => {
+    const res = await inject("POST", "/v1/clock/start", otherCookie);
+    expect(res.statusCode).toBe(200);
+    await inject("POST", "/v1/clock/stop", otherCookie);
   });
 });
 
@@ -186,53 +186,45 @@ describe("GET /v1/clock/active", () => {
 
 describe("clock break flow", () => {
   it("pauses and resumes an active clock event", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
 
-    const pauseRes = await inject("POST", "/v1/clock/pause", workerCookie, { teamId });
+    const pauseRes = await inject("POST", "/v1/clock/pause", workerCookie);
     expect(pauseRes.statusCode).toBe(200);
     expect(pauseRes.json().event.isPaused).toBe(true);
     expect(Array.isArray(pauseRes.json().event.breaks)).toBe(true);
     expect(pauseRes.json().event.breaks.length).toBeGreaterThan(0);
     expect(pauseRes.json().event.breaks[0].endTime).toBeNull();
 
-    const statusWhilePaused = await inject(
-      "GET",
-      `/v1/clock/status?teamId=${teamId}`,
-      workerCookie
-    );
+    const statusWhilePaused = await inject("GET", `/v1/clock/status`, workerCookie);
     expect(statusWhilePaused.statusCode).toBe(200);
     expect(statusWhilePaused.json().isPaused).toBe(true);
 
-    const resumeRes = await inject("POST", "/v1/clock/resume", workerCookie, { teamId });
+    const resumeRes = await inject("POST", "/v1/clock/resume", workerCookie);
     expect(resumeRes.statusCode).toBe(200);
     expect(resumeRes.json().event.isPaused).toBe(false);
     expect(Array.isArray(resumeRes.json().event.breaks)).toBe(true);
     expect(resumeRes.json().event.breaks[0].endTime).not.toBeNull();
 
-    const statusAfterResume = await inject(
-      "GET",
-      `/v1/clock/status?teamId=${teamId}`,
-      workerCookie
-    );
+    const statusAfterResume = await inject("GET", `/v1/clock/status`, workerCookie);
     expect(statusAfterResume.statusCode).toBe(200);
     expect(statusAfterResume.json().isPaused).toBe(false);
 
-    const stopRes = await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    const stopRes = await inject("POST", "/v1/clock/stop", workerCookie);
     expect(stopRes.statusCode).toBe(200);
   });
 
   it("returns 409 when pausing an already paused clock", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
 
-    const firstPause = await inject("POST", "/v1/clock/pause", workerCookie, { teamId });
+    const firstPause = await inject("POST", "/v1/clock/pause", workerCookie);
     expect(firstPause.statusCode).toBe(200);
 
-    const secondPause = await inject("POST", "/v1/clock/pause", workerCookie, { teamId });
+    const secondPause = await inject("POST", "/v1/clock/pause", workerCookie);
     expect(secondPause.statusCode).toBe(409);
 
-    await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    await inject("POST", "/v1/clock/stop", workerCookie);
   });
 });
 
@@ -243,7 +235,7 @@ describe("clock monitor enforcement", () => {
     const db = client.db();
     await db.collection("notifications").deleteMany({ userId: workerId });
 
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const eventId = startRes.json().event.id as string;
 
@@ -270,7 +262,7 @@ describe("clock monitor enforcement", () => {
       .toArray();
     expect(reminders.length).toBe(1);
 
-    await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    await inject("POST", "/v1/clock/stop", workerCookie);
   });
 });
 
@@ -305,10 +297,10 @@ describe("POST /v1/attachments (clock)", () => {
 
 describe("POST /v1/clock/stop", () => {
   it("clocks out — 200, sets endTime", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
 
-    const res = await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    const res = await inject("POST", "/v1/clock/stop", workerCookie);
     expect(res.statusCode).toBe(200);
     const { event } = res.json();
     expect(event.endTime).not.toBeNull();
@@ -322,7 +314,7 @@ describe("POST /v1/clock/stop", () => {
   });
 
   it("returns 404 when already clocked out", async () => {
-    const res = await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    const res = await inject("POST", "/v1/clock/stop", workerCookie);
     expect(res.statusCode).toBe(404);
   });
 });
@@ -406,7 +398,7 @@ describe("PUT /v1/clock/:id/times", () => {
   });
 
   it("shrinks overlapping break periods and recalculates totals on edit", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const eventId = startRes.json().event.id as string;
 
@@ -450,7 +442,7 @@ describe("PUT /v1/clock/:id/times", () => {
   });
 
   it("accepts manual break edits and recalculates session totals", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const eventId = startRes.json().event.id as string;
 
@@ -488,7 +480,7 @@ describe("PUT /v1/clock/:id/times", () => {
 
 describe("DELETE /v1/clock/:id", () => {
   it("event owner can delete a clock event — 200", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const ownedEventId = startRes.json().event.id as string;
 
@@ -498,7 +490,7 @@ describe("DELETE /v1/clock/:id", () => {
   });
 
   it("team admin can delete another member's clock event — 200", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const targetEventId = startRes.json().event.id as string;
 
@@ -508,7 +500,7 @@ describe("DELETE /v1/clock/:id", () => {
   });
 
   it("non-owner non-admin returns 403", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const targetEventId = startRes.json().event.id as string;
 
@@ -548,7 +540,7 @@ describe("GET /v1/clock/timesheet", () => {
   });
 
   it("includes live elapsed time for an active session in summary totals", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const activeEventId = startRes.json().event.id as string;
 
@@ -575,11 +567,11 @@ describe("GET /v1/clock/timesheet", () => {
     const minLiveSeconds = Math.max(0, Math.floor((Date.now() - twoMinutesAgo) / 1000) - 2);
     expect(res.json().summary.totalSeconds).toBeGreaterThanOrEqual(minLiveSeconds);
 
-    await inject("POST", "/v1/clock/stop", workerCookie, { teamId });
+    await inject("POST", "/v1/clock/stop", workerCookie);
   });
 
   it("includes a completed session that spans a midnight boundary", async () => {
-    const startRes = await inject("POST", "/v1/clock/start", workerCookie, { teamId });
+    const startRes = await inject("POST", "/v1/clock/start", workerCookie);
     expect(startRes.statusCode).toBe(200);
     const crossMidnightEventId = startRes.json().event.id as string;
 

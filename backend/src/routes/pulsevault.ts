@@ -11,6 +11,7 @@ import pulseVault, {
 import { fromNodeHeaders } from "better-auth/node";
 import { requireAuth } from "../middleware/require-auth.js";
 import { auth } from "../lib/auth.js";
+import { getVideoStorageDir } from "../lib/video-storage.js";
 import { mediaItemsCollection, teamsCollection } from "../models/index.js";
 import { ticketService } from "../services/ticket.service.js";
 import { attachmentService } from "../services/attachment.service.js";
@@ -24,7 +25,7 @@ import {
 } from "../services/video-reserve.service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.resolve(__dirname, "../../data/videos");
+const dataDir = getVideoStorageDir();
 
 type ReserveTarget = "ticket" | "library";
 type ReserveRequestBody = {

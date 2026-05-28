@@ -335,7 +335,9 @@ export const OzwellWidget: React.FC = () => {
       clockedIn: activeClockEvent != null,
       clockedInTeamId: activeClockEvent?.teamId ?? null,
       clockedInTeamName: activeClockEvent
-        ? (teams.find((t) => t.id === activeClockEvent.teamId)?.name ?? null)
+        ? activeClockEvent.teamId
+          ? (teams.find((t) => t.id === activeClockEvent.teamId)?.name ?? null)
+          : null
         : null,
       clockedInSince: activeClockEvent
         ? new Date(activeClockEvent.startTime).toLocaleTimeString([], {
@@ -451,8 +453,10 @@ export const OzwellWidget: React.FC = () => {
                 ? new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 : 'still clocked in',
               duration: formatDuration(getWorkSeconds(s)),
-              teamId: s.teamId,
-              team: ctx.teams.find((t) => t.id === s.teamId)?.name ?? s.teamId,
+              teamId: s.teamId ?? null,
+              team: s.teamId
+                ? (ctx.teams.find((t) => t.id === s.teamId)?.name ?? s.teamId)
+                : 'No Team',
             }));
             respond({
               success: true,
@@ -481,7 +485,7 @@ export const OzwellWidget: React.FC = () => {
                   since: ctx.activeClockEvent.startTime,
                   elapsed: formatDuration(elapsedSeconds),
                   eventId: ctx.activeClockEvent.id,
-                  teamId: ctx.activeClockEvent.teamId,
+                  teamId: ctx.activeClockEvent.teamId ?? null,
                 },
               });
             } else {
@@ -491,26 +495,18 @@ export const OzwellWidget: React.FC = () => {
           }
 
           case 'clock_in': {
-            if (!ctx.selectedTeamId) {
-              const available = ctx.teams.map((t) => `"${t.name}"`).join(', ');
-              respond({
-                success: false,
-                error: `No team selected. Use switch_team first. Available teams: ${available}`,
-              });
-              return;
-            }
-            const event = await clockApi.start(ctx.selectedTeamId);
+            const event = await clockApi.start();
             ctx.refetchClock();
             respond({ success: true, data: event });
             break;
           }
 
           case 'clock_out': {
-            if (!ctx.selectedTeamId) {
-              respond({ success: false, error: 'No team selected' });
+            if (!ctx.activeClockEvent) {
+              respond({ success: false, error: 'You are not currently clocked in.' });
               return;
             }
-            const stoppedEvent = await clockApi.stop(ctx.selectedTeamId);
+            const stoppedEvent = await clockApi.stop();
             ctx.refetchClock();
             respond({ success: true, data: stoppedEvent });
             break;
@@ -905,7 +901,7 @@ export const OzwellWidget: React.FC = () => {
               });
               return;
             }
-            if (ctx.activeClockEvent.teamId !== teamId) {
+            if (ctx.activeClockEvent.teamId && ctx.activeClockEvent.teamId !== teamId) {
               const clockedTeam = ctx.teams.find((t) => t.id === ctx.activeClockEvent?.teamId);
               respond({
                 success: false,

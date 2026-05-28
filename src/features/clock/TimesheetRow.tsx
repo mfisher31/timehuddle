@@ -181,7 +181,9 @@ function splitAtMidnight(rows: TimelineRow[]): TimelineRow[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TimesheetRow: React.FC<Props> = ({ session, teams, onEdit }) => {
-  const teamName = teams.find((t) => t.id === session.teamId)?.name ?? session.teamId;
+  const teamName = session.teamId
+    ? (teams.find((t) => t.id === session.teamId)?.name ?? session.teamId)
+    : 'No Team';
   const timelineRows = splitAtMidnight(buildTimelineRows(session, Date.now()));
 
   return (

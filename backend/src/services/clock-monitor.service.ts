@@ -45,7 +45,6 @@ class ClockMonitorService {
             body: "Take a break. You have worked for 4 hours.",
             notificationData: {
               type: "break-reminder-4h",
-              teamId: event.teamId,
               clockEventId: event._id.toHexString(),
               url: "/app/clock",
             },

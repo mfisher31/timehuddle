@@ -39,7 +39,7 @@ export async function ensureIndexes() {
 
   // ── Clock event indexes ─────────────────────────────────────────────────────
   const clockEvents = db.collection("clockevents");
-  await clockEvents.createIndex({ userId: 1, teamId: 1, endTime: 1 });
+  await clockEvents.createIndex({ userId: 1, endTime: 1 });
 
   // ── Clock break indexes ─────────────────────────────────────────────────────
   const clockBreaks = db.collection("clockbreaks");

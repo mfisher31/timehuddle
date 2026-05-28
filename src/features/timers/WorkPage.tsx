@@ -269,8 +269,7 @@ export const WorkPage: React.FC = () => {
   useEffect(() => {
     if (teams.length === 0) return;
 
-    const teamIds = teams.map((t) => t.id);
-    const ws = clockApi.openLiveStream(teamIds);
+    const ws = clockApi.openLiveStream();
 
     ws.onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);

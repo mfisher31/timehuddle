@@ -1,9 +1,7 @@
 /**
  * useClockToggle — Shared clock-in / clock-out logic.
  *
- * Encapsulates the API calls, loading states, and the teamId guard (always
- * prefer the active event's teamId over the currently selected team, since the
- * user may have switched teams after clocking in).
+ * Encapsulates the API calls and loading states.
  */
 import { useCallback, useState } from 'react';
 
@@ -11,7 +9,7 @@ import { clockApi } from './api';
 import { useTeam } from './TeamContext';
 
 export function useClockToggle() {
-  const { activeClockEvent, selectedTeamId, refetchClock } = useTeam();
+  const { activeClockEvent, refetchClock } = useTeam();
 
   const [clockInLoading, setClockInLoading] = useState(false);
   const [clockOutLoading, setClockOutLoading] = useState(false);
@@ -20,50 +18,46 @@ export function useClockToggle() {
   const isClockedIn = !!activeClockEvent;
 
   const clockIn = useCallback(async () => {
-    if (!selectedTeamId) return;
     setClockInLoading(true);
     try {
-      await clockApi.start(selectedTeamId);
+      await clockApi.start();
       await refetchClock();
     } finally {
       setClockInLoading(false);
     }
-  }, [selectedTeamId, refetchClock]);
+  }, [refetchClock]);
 
   const clockOut = useCallback(async () => {
-    const teamId = activeClockEvent?.teamId ?? selectedTeamId;
-    if (!teamId) return;
+    if (!activeClockEvent) return;
     setClockOutLoading(true);
     try {
-      await clockApi.stop(teamId);
+      await clockApi.stop();
       await refetchClock();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to clock out. Please try again.');
     } finally {
       setClockOutLoading(false);
     }
-  }, [activeClockEvent, selectedTeamId, refetchClock]);
+  }, [activeClockEvent, refetchClock]);
 
   const pauseClock = useCallback(async () => {
-    const teamId = activeClockEvent?.teamId ?? selectedTeamId;
-    if (!teamId) return;
+    if (!activeClockEvent) return;
     setClockPauseLoading(true);
     try {
-      await clockApi.pause(teamId);
+      await clockApi.pause();
       await refetchClock();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to pause clock. Please try again.');
     } finally {
       setClockPauseLoading(false);
     }
-  }, [activeClockEvent, selectedTeamId, refetchClock]);
+  }, [activeClockEvent, refetchClock]);
 
   const resumeClock = useCallback(async () => {
-    const teamId = activeClockEvent?.teamId ?? selectedTeamId;
-    if (!teamId) return;
+    if (!activeClockEvent) return;
     setClockPauseLoading(true);
     try {
-      await clockApi.resume(teamId);
+      await clockApi.resume();
       await refetchClock();
     } catch (err) {
       window.alert(
@@ -72,7 +66,7 @@ export function useClockToggle() {
     } finally {
       setClockPauseLoading(false);
     }
-  }, [activeClockEvent, selectedTeamId, refetchClock]);
+  }, [activeClockEvent, refetchClock]);
 
   return {
     isClockedIn,

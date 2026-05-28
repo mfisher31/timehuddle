@@ -31,7 +31,9 @@ const OUTSIDER_USER = {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mediaUploadsDir = path.resolve(__dirname, "../uploads/media");
 const thumbnailsDir = path.resolve(__dirname, "../uploads/thumbnails");
-const videosDir = path.resolve(__dirname, "../data/videos");
+const videosDir = path.resolve(
+  process.env.TIMEHUDDLE_VIDEOS_DIR?.trim() || path.resolve(__dirname, "../data/videos")
+);
 
 let app: FastifyInstance;
 let cookie: string;

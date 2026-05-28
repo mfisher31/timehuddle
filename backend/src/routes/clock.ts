@@ -1,10 +1,8 @@
 import { FastifyInstance } from "fastify";
-import { ObjectId } from "mongodb";
 import { auth } from "../lib/auth.js";
 import { requireAuth } from "../middleware/require-auth.js";
 import { clockService, toPublicClockEvent, subscribe } from "../services/clock.service.js";
 import { findBreaksForEvents } from "../models/clock.model.js";
-import { teamsCollection } from "../models/index.js";
 import { clockController } from "../controllers/clock.controller.js";
 
 // ─── Public shape schema ──────────────────────────────────────────────────────
@@ -14,7 +12,6 @@ const clockEventShape = {
   properties: {
     id: { type: "string" },
     userId: { type: "string" },
-    teamId: { type: "string" },
     startTime: { type: "number" },
     accumulatedTime: { type: "number" },
     breaks: {
@@ -48,11 +45,6 @@ export async function clockRoutes(app: FastifyInstance) {
       onRequest: [requireAuth],
       schema: {
         tags: ["Clock"],
-        body: {
-          type: "object",
-          required: ["teamId"],
-          properties: { teamId: { type: "string" } },
-        },
         response: { 200: { type: "object", properties: { event: clockEventShape } } },
       },
     },
@@ -66,13 +58,6 @@ export async function clockRoutes(app: FastifyInstance) {
       onRequest: [requireAuth],
       schema: {
         tags: ["Clock"],
-        body: {
-          type: "object",
-          required: ["teamId"],
-          properties: {
-            teamId: { type: "string" },
-          },
-        },
         response: { 200: { type: "object", properties: { event: clockEventShape } } },
       },
     },
@@ -86,13 +71,6 @@ export async function clockRoutes(app: FastifyInstance) {
       onRequest: [requireAuth],
       schema: {
         tags: ["Clock"],
-        body: {
-          type: "object",
-          required: ["teamId"],
-          properties: {
-            teamId: { type: "string" },
-          },
-        },
         response: { 200: { type: "object", properties: { event: clockEventShape } } },
       },
     },
@@ -106,33 +84,19 @@ export async function clockRoutes(app: FastifyInstance) {
       onRequest: [requireAuth],
       schema: {
         tags: ["Clock"],
-        body: {
-          type: "object",
-          required: ["teamId"],
-          properties: {
-            teamId: { type: "string" },
-          },
-        },
         response: { 200: { type: "object", properties: { event: clockEventShape } } },
       },
     },
     clockController.resume
   );
 
-  // GET /v1/clock/status?teamId=...
+  // GET /v1/clock/status
   app.get(
     "/clock/status",
     {
       onRequest: [requireAuth],
       schema: {
         tags: ["Clock"],
-        querystring: {
-          type: "object",
-          required: ["teamId"],
-          properties: {
-            teamId: { type: "string" },
-          },
-        },
       },
     },
     clockController.getStatus
@@ -196,9 +160,8 @@ export async function clockRoutes(app: FastifyInstance) {
         tags: ["Clock"],
         body: {
           type: "object",
-          required: ["teamId", "startTime", "endTime"],
+          required: ["startTime", "endTime"],
           properties: {
-            teamId: { type: "string" },
             startTime: { type: "number" },
             endTime: { type: "number" },
           },
@@ -258,11 +221,10 @@ export async function clockRoutes(app: FastifyInstance) {
     clockController.getEvents
   );
 
-  // GET /v1/clock/ws?teamIds=id1,id2 — WebSocket stream for live team clock state
+  // GET /v1/clock/ws — WebSocket stream for current user's live clock state
   app.get("/clock/ws", { websocket: true }, async (socket, req) => {
-    const { token: queryToken, teamIds: teamIdsParam } = req.query as {
+    const { token: queryToken } = req.query as {
       token?: string;
-      teamIds?: string;
     };
 
     // Auth: accept Bearer token from query param (Capacitor) or cookie
@@ -274,64 +236,22 @@ export async function clockRoutes(app: FastifyInstance) {
       return;
     }
 
-    if (!teamIdsParam) {
-      socket.close(4000, "teamIds required");
-      return;
-    }
-    const requestedIds = teamIdsParam
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    // Validate the requester is a member or admin of every requested team
-    const objectIds = requestedIds.flatMap((id) => {
-      try {
-        return [new ObjectId(id)];
-      } catch {
-        return [];
-      }
-    });
-    const allTeams = await teamsCollection()
-      .find({ _id: { $in: objectIds } })
-      .toArray();
-
     const userId = session.user.id;
-    const teamIds = allTeams
-      .filter((t) => {
-        const tid = t._id.toHexString();
-        return (
-          requestedIds.includes(tid) && (t.members?.includes(userId) || t.admins?.includes(userId))
-        );
-      })
-      .map((t) => t._id.toHexString());
-
-    if (teamIds.length === 0) {
-      socket.close(4003, "Forbidden");
-      return;
-    }
 
     // Send initial snapshot
-    const initial = await clockService.getLiveForTeams(teamIds);
-    const initialIds = initial.map((e) => e._id.toHexString());
+    const active = await clockService.getActiveForUser(userId);
+    const initialIds = active ? [active._id.toHexString()] : [];
     const initialBreaks = await findBreaksForEvents(initialIds);
-    const initialBreaksByEventId = new Map<string, typeof initialBreaks>();
-    for (const b of initialBreaks) {
-      const arr = initialBreaksByEventId.get(b.clockEventId) ?? [];
-      arr.push(b);
-      initialBreaksByEventId.set(b.clockEventId, arr);
-    }
-    const snapshot = initial.map((e) =>
-      toPublicClockEvent(e, initialBreaksByEventId.get(e._id.toHexString()) ?? [])
-    );
+    const snapshot = active ? [toPublicClockEvent(active, initialBreaks)] : [];
     if (socket.readyState === socket.OPEN) {
       socket.send(JSON.stringify({ type: "snapshot", events: snapshot }));
     }
 
     // Subscribe to future broadcasts
-    const unsub = subscribe((teamId, event) => {
-      if (!teamIds.includes(teamId)) return;
+    const unsub = subscribe((changedUserId, event) => {
+      if (changedUserId !== userId) return;
       if (socket.readyState === socket.OPEN) {
-        socket.send(JSON.stringify({ type: "update", teamId, event }));
+        socket.send(JSON.stringify({ type: "update", event }));
       }
     });
 

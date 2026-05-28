@@ -652,7 +652,7 @@ export const teamApi = {
 export interface ClockEvent {
   id: string;
   userId: string;
-  teamId: string;
+  teamId?: string;
   startTime: number;
   /** @deprecated No longer returned by the API — use startTime. */
   originalStartTime?: number;
@@ -674,41 +674,37 @@ export interface ClockEvent {
 }
 
 export const clockApi = {
-  /** Clock in to a team. Returns the new clock event. */
-  start: (teamId: string) =>
+  /** Clock in. Returns the new clock event. */
+  start: () =>
     request<{ event: ClockEvent }>('/v1/clock/start', {
       method: 'POST',
-      body: JSON.stringify({ teamId }),
     }).then((r) => r.event),
 
-  /** Clock out of a team. */
-  stop: (teamId: string) =>
+  /** Clock out. */
+  stop: () =>
     request<{ event: ClockEvent }>('/v1/clock/stop', {
       method: 'POST',
-      body: JSON.stringify({ teamId }),
     }).then((r) => r.event),
 
   /** Pause an active clock session (break start). */
-  pause: (teamId: string) =>
+  pause: () =>
     request<{ event: ClockEvent }>('/v1/clock/pause', {
       method: 'POST',
-      body: JSON.stringify({ teamId }),
     }).then((r) => r.event),
 
   /** Resume a paused clock session (break end). */
-  resume: (teamId: string) =>
+  resume: () =>
     request<{ event: ClockEvent }>('/v1/clock/resume', {
       method: 'POST',
-      body: JSON.stringify({ teamId }),
     }).then((r) => r.event),
 
-  /** Get active clock status for a team. */
-  getStatus: (teamId: string) =>
+  /** Get active clock status. */
+  getStatus: () =>
     request<{
       event: ClockEvent;
       workSeconds: number;
       isPaused: boolean;
-    }>(`/v1/clock/status?teamId=${encodeURIComponent(teamId)}`),
+    }>('/v1/clock/status'),
 
   /** Get the current user's active clock event (any team), or null. */
   getActive: () => request<{ event: ClockEvent | null }>('/v1/clock/active').then((r) => r.event),
@@ -753,18 +749,18 @@ export const clockApi = {
     }).then((r) => r.ok),
 
   /** Create a completed manual clock entry for a past time range. */
-  createManualEntry: (data: { teamId: string; startTime: number; endTime: number }) =>
+  createManualEntry: (data: { startTime: number; endTime: number }) =>
     request<{ event: ClockEvent }>('/v1/clock/manual', {
       method: 'POST',
       body: JSON.stringify(data),
     }).then((r) => r.event),
 
-  /** Open a WebSocket connection for live team clock state. Auto-reconnects on drop. */
-  openLiveStream: (teamIds: string[]): AutoReconnectWs =>
+  /** Open a WebSocket connection for live user clock state. Auto-reconnects on drop. */
+  openLiveStream: (): AutoReconnectWs =>
     autoReconnectWs(() => {
       const token = sessionToken.get();
-      const base = `${WS_BASE_URL}/v1/clock/ws?teamIds=${teamIds.map(encodeURIComponent).join(',')}`;
-      return token ? `${base}&token=${encodeURIComponent(token)}` : base;
+      const base = `${WS_BASE_URL}/v1/clock/ws`;
+      return token ? `${base}?token=${encodeURIComponent(token)}` : base;
     }),
 };
 

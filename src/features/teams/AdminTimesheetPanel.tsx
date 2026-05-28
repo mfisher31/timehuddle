@@ -155,10 +155,8 @@ export const AdminTimesheetPanel: React.FC<Props> = ({ members, selectedTeamId, 
   // Filter sessions to selected team only
   const filteredSessions = useMemo(() => {
     if (!data) return [];
-    return selectedTeamId
-      ? data.sessions.filter((s) => s.teamId === selectedTeamId)
-      : data.sessions;
-  }, [data, selectedTeamId]);
+    return data.sessions;
+  }, [data]);
 
   // Group filtered sessions by calendar day (descending date order)
   const groupedByDay = useMemo(() => {

@@ -197,11 +197,11 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Real-time WebSocket connection for clock updates
   useEffect(() => {
-    if (!userId || !selectedTeamId) {
+    if (!userId) {
       return;
     }
 
-    const ws = clockApi.openLiveStream([selectedTeamId]);
+    const ws = clockApi.openLiveStream();
 
     ws.onmessage = (event: MessageEvent) => {
       try {
@@ -210,28 +210,17 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.type === 'snapshot') {
           // Initial snapshot: find the current user's active event from the array
           const userEvent =
-            data.events?.find(
-              (e: ClockEvent) => e.userId === userId && e.teamId === selectedTeamId && !e.endTime,
-            ) ?? null;
+            data.events?.find((e: ClockEvent) => e.userId === userId && !e.endTime) ?? null;
           setActiveClockEvent(userEvent);
           setClockReady(true);
         } else if (data.type === 'update') {
           // Real-time update: apply if it's for the current user
           const updatedEvent = data.event as ClockEvent | null;
-          if (
-            updatedEvent &&
-            updatedEvent.userId === userId &&
-            updatedEvent.teamId === selectedTeamId
-          ) {
+          if (updatedEvent && updatedEvent.userId === userId) {
             setActiveClockEvent(updatedEvent);
           } else if (!updatedEvent) {
-            // Clock out (event is null) — clear active event if it was for this user/team
-            setActiveClockEvent((prev) => {
-              if (prev && prev.teamId === data.teamId) {
-                return null;
-              }
-              return prev;
-            });
+            // Clock out (event is null)
+            setActiveClockEvent(null);
           }
         }
       } catch (err) {
@@ -240,11 +229,11 @@ export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // Cleanup: close WebSocket connection when team changes or component unmounts
+    // Cleanup: close WebSocket connection when component unmounts
     return () => {
       ws.close();
     };
-  }, [userId, selectedTeamId, refetchClock]);
+  }, [userId]);
 
   // ── Live timer ──────────────────────────────────────────────────────────────
 

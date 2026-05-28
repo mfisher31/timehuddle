@@ -37,26 +37,16 @@ async function login(page: import('@playwright/test').Page) {
 /** Stop any active clock session so each test starts clean. */
 async function ensureClockedOut(page: import('@playwright/test').Page) {
   const res = await page.request.get(`${API_BASE}/clock/active`);
-  const { event } = (await res.json()) as { event: { teamId: string } | null };
+  const { event } = (await res.json()) as { event: { id: string } | null };
   if (!event) return;
-  await page.request.post(`${API_BASE}/clock/stop`, {
-    data: { teamId: event.teamId },
-  });
+  await page.request.post(`${API_BASE}/clock/stop`);
 }
 
-/** Fetch alice's first team and clock in. Returns the new event id. */
-async function clockIn(
-  page: import('@playwright/test').Page,
-): Promise<{ eventId: string; teamId: string }> {
-  const teamsRes = await page.request.get(`${API_BASE}/teams`);
-  const { teams } = (await teamsRes.json()) as { teams: { id: string }[] };
-  const teamId = teams[0].id;
-
-  const startRes = await page.request.post(`${API_BASE}/clock/start`, {
-    data: { teamId },
-  });
+/** Clock in. Returns the new event id. */
+async function clockIn(page: import('@playwright/test').Page): Promise<{ eventId: string }> {
+  const startRes = await page.request.post(`${API_BASE}/clock/start`);
   const { event } = (await startRes.json()) as { event: { id: string } };
-  return { eventId: event.id, teamId };
+  return { eventId: event.id };
 }
 
 type ClockBreakShape = {
@@ -112,12 +102,10 @@ test.describe('Clock Break Classification', () => {
   // ── Test 1: Live pause → resume ───────────────────────────────────────────
 
   test('live pause/resume auto-classifies short break as rest', async ({ page }) => {
-    const { teamId } = await clockIn(page);
+    await clockIn(page);
 
     // Pause
-    const pauseRes = await page.request.post(`${API_BASE}/clock/pause`, {
-      data: { teamId },
-    });
+    const pauseRes = await page.request.post(`${API_BASE}/clock/pause`);
     const { event: paused } = (await pauseRes.json()) as { event: PublicClockEvent };
     expect(paused.isPaused).toBe(true);
 
@@ -125,9 +113,7 @@ test.describe('Clock Break Classification', () => {
     await page.waitForTimeout(1100);
 
     // Resume
-    const resumeRes = await page.request.post(`${API_BASE}/clock/resume`, {
-      data: { teamId },
-    });
+    const resumeRes = await page.request.post(`${API_BASE}/clock/resume`);
     const { event: resumed } = (await resumeRes.json()) as { event: PublicClockEvent };
 
     expect(resumed.isPaused).toBe(false);

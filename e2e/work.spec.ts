@@ -16,12 +16,10 @@ async function ensureClockedOut(page: import('@playwright/test').Page) {
   // page.request shares the browser's cookie jar. The backend is at port 4000;
   // localhost cookies are shared across ports so the auth session is included.
   const activeRes = await page.request.get('http://localhost:4000/v1/clock/active');
-  const { event } = (await activeRes.json()) as { event: { teamId: string } | null };
+  const { event } = (await activeRes.json()) as { event: { id: string } | null };
   if (!event) return;
 
-  await page.request.post('http://localhost:4000/v1/clock/stop', {
-    data: { teamId: event.teamId },
-  });
+  await page.request.post('http://localhost:4000/v1/clock/stop');
 }
 
 async function ensureNoRunningTimer(page: import('@playwright/test').Page) {
