@@ -1,0 +1,54 @@
+version: 1
+
+metadata:
+  name: Acme Demo Seed
+  description: Example enterprise/org/users/teams for local development.
+
+enterprises:
+  acme:
+    name: Acme Corporation
+
+organizationTemplates:
+  basic-agency:
+    name: Basic Agency Organization
+    teams:
+      leadership:
+        name: Leadership
+      engineering:
+        name: Engineering
+      support:
+        name: Support
+
+organizations:
+  acme-main:
+    name: Acme Main Office
+    enterprise: acme
+    template: basic-agency
+
+users:
+  alice:
+    name: Alice Adams
+    email: alice@example.com
+
+  bob:
+    name: Bob Baker
+    email: bob@example.com
+
+teams:
+  platform:
+    name: Platform
+    organization: acme-main
+
+memberships:
+  - user: alice
+    organization: acme-main
+    role: owner
+    teams:
+      - leadership
+
+  - user: bob
+    organization: acme-main
+    role: member
+    teams:
+      - engineering
+      - platform

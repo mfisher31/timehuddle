@@ -1,0 +1,17 @@
+version: 1
+
+# A membership-only file. References (alice, bob, acme-main, the template teams,
+# and the platform team) resolve against the other files in this directory.
+memberships:
+  - user: alice
+    organization: acme-main
+    role: owner
+    teams:
+      - leadership
+
+  - user: bob
+    organization: acme-main
+    role: member
+    teams:
+      - engineering
+      - platform

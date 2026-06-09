@@ -1,0 +1,7 @@
+version: 1
+
+# An extra team declared directly (in addition to the template's teams).
+teams:
+  platform:
+    name: Platform
+    organization: acme-main

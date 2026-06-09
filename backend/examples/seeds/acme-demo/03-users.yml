@@ -1,0 +1,11 @@
+version: 1
+
+# A file that declares only users is valid on its own.
+users:
+  alice:
+    name: Alice Adams
+    email: alice@example.com
+
+  bob:
+    name: Bob Baker
+    email: bob@example.com

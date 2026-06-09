@@ -1,0 +1,13 @@
+version: 1
+
+# A reusable organization template that defines teams but no members.
+organizationTemplates:
+  basic-agency:
+    name: Basic Agency Organization
+    teams:
+      leadership:
+        name: Leadership
+      engineering:
+        name: Engineering
+      support:
+        name: Support

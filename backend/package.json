@@ -15,6 +15,7 @@
     "migrate:down": "npx migrate-mongo down -f migrate-mongo-config.cjs",
     "seed": "tsx scripts/seed.ts",
     "seed:hierarchy": "tsx scripts/seed-org-hierarchy.ts",
+    "seed:import": "tsx scripts/seed-import.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\"",
@@ -44,7 +45,8 @@
     "mongodb": "^6.14.2",
     "mongoose": "^9.6.2",
     "nodemailer": "^8.0.5",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

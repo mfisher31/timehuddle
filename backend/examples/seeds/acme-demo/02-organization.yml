@@ -1,0 +1,16 @@
+version: 1
+
+metadata:
+  name: Acme Demo Seed
+  description: Example enterprise/org/users/teams for local development.
+
+# Enterprise + the organization that instantiates the basic-agency template.
+enterprises:
+  acme:
+    name: Acme Corporation
+
+organizations:
+  acme-main:
+    name: Acme Main Office
+    enterprise: acme
+    template: basic-agency
